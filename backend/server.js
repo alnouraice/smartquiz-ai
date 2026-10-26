@@ -16,9 +16,8 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET must be set to a secret of at least 32 characters.');
 }
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+app.use(cors());
 app.use(express.json({ limit: '1mb' }));
-
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
