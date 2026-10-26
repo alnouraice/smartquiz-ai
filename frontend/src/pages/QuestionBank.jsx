@@ -21,6 +21,13 @@ export default function QuestionBank() {
   const [editingId, setEditingId] = useState(null);
   const [pasteText, setPasteText] = useState('');
   const [bulkUnit, setBulkUnit] = useState('مكونات الحاسوب');
+  
+  // متغيرات الذكاء الاصطناعي
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiCount, setAiCount] = useState(5);
+  const [aiDifficulty, setAiDifficulty] = useState('متوسط');
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -130,18 +137,114 @@ export default function QuestionBank() {
     }
   }
 
+  // دالة توليد الأسئلة عبر الذكاء الاصطناعي
+  async function generateWithAI() {
+    if (!aiPrompt.trim()) {
+      setError('الرجاء إدخال النص التعليمي أو المنهج أولاً.');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setIsGenerating(true);
+    try {
+      // إرسال الطلب إلى الخادم للتوليد (تأكد أن مسار /admin/questions/generate مطابق للباك-إند لديك)
+      const { data } = await api.post('/admin/questions/generate', {
+        text: aiPrompt,
+        count: parseInt(aiCount, 10),
+        difficulty: aiDifficulty,
+        unit_name: bulkUnit
+      });
+      
+      // إذا كان الخادم يرجع الأسئلة المولدة لنحفظها مباشرة
+      if (data.questions && Array.isArray(data.questions)) {
+        await importQuestions(data.questions);
+      } else {
+        setMessage('تم توليد الأسئلة وحفظها بنجاح!');
+        await loadQuestions();
+      }
+      setAiPrompt('');
+    } catch (requestError) {
+      setError(requestError.response?.data?.error || 'حدث خطأ أثناء التوليد باستخدام الذكاء الاصطناعي. تأكد من تشغيل مفتاح Gemini.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <header>
         <h1 className="text-3xl font-extrabold text-navy">بنك الأسئلة</h1>
-        <p className="mt-2 text-slate-600">إضافة الأسئلة وتصنيفها وتحريرها واستيرادها دفعة واحدة.</p>
+        <p className="mt-2 text-slate-600">إضافة الأسئلة وتصنيفها وتحريرها واستيرادها دفعة واحدة وتوليدها بالذكاء الاصطناعي.</p>
       </header>
 
       {error && <p className="rounded-lg bg-red-50 p-4 text-red-800" role="alert">{error}</p>}
       {message && <p className="rounded-lg bg-teal-50 p-4 text-teal-900" role="status">{message}</p>}
 
+      {/* قسم التوليد بالذكاء الاصطناعي الجديد */}
+      <section className="rounded-2xl border border-purple-100 bg-purple-50 p-6 shadow-panel">
+        <h2 className="mb-2 flex items-center gap-2 text-xl font-bold text-purple-900">
+          ✨ التوليد الذكي باستخدام الذكاء الاصطناعي (Gemini)
+        </h2>
+        <p className="mb-5 text-sm text-slate-700">
+          أدخل فقرة من المنهج أو النص التعليمي، وسيقوم الذكاء الاصطناعي باستخراج الأسئلة والخيارات وتحديد الإجابة الصحيحة تلقائياً.
+        </p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="md:col-span-3">
+            <span className="mb-1 block text-sm font-semibold">النص التعليمي / المنهج</span>
+            <textarea 
+              className="w-full rounded-lg border border-purple-200 p-3 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500" 
+              rows="4" 
+              placeholder="انسخ والصق الدرس هنا (مثال: مكونات الحاسوب...)" 
+              value={aiPrompt} 
+              onChange={(e) => setAiPrompt(e.target.value)} 
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-semibold">عدد الأسئلة</span>
+            <input 
+              type="number" 
+              min="1" 
+              max="20" 
+              className="w-full rounded-lg border border-slate-300 p-3" 
+              value={aiCount} 
+              onChange={(e) => setAiCount(e.target.value)} 
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-semibold">مستوى الصعوبة</span>
+            <select 
+              className="w-full rounded-lg border border-slate-300 bg-white p-3" 
+              value={aiDifficulty} 
+              onChange={(e) => setAiDifficulty(e.target.value)}
+            >
+              <option>سهل</option>
+              <option>متوسط</option>
+              <option>صعب</option>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-semibold">الوحدة الدراسية</span>
+            <input 
+              className="w-full rounded-lg border border-slate-300 p-3" 
+              value={bulkUnit} 
+              onChange={(e) => setBulkUnit(e.target.value)} 
+            />
+          </label>
+          <div className="md:col-span-3">
+            <button 
+              className="mt-2 flex items-center gap-2 rounded-lg bg-purple-600 px-6 py-3 font-bold text-white hover:bg-purple-700 disabled:opacity-50" 
+              onClick={generateWithAI} 
+              disabled={isGenerating || !aiPrompt.trim()} 
+              type="button"
+            >
+              {isGenerating ? 'جارٍ التوليد بواسطة Gemini ⏳...' : 'توليد الأسئلة ✨'}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-2xl bg-white p-6 shadow-panel">
-        <h2 className="mb-5 text-xl font-bold text-navy">{editingId ? 'تحرير السؤال' : 'إضافة سؤال'}</h2>
+        <h2 className="mb-5 text-xl font-bold text-navy">{editingId ? 'تحرير السؤال' : 'إضافة سؤال يدوي'}</h2>
         <form className="grid gap-4 md:grid-cols-2" onSubmit={saveQuestion}>
           <label className="md:col-span-2">
             <span className="mb-1 block text-sm font-semibold">نص السؤال</span>
@@ -190,7 +293,7 @@ export default function QuestionBank() {
           <code className="mx-1 rounded bg-white px-2 py-1" dir="ltr">Q: Text | Options: A, B, C, D | Answer: A | Diff: Easy</code>
         </p>
         <label className="mt-4 block max-w-md">
-          <span className="mb-1 block text-sm font-semibold">الوحدة الافتراضية للنص الملصق</span>
+          <span className="mb-1 block text-sm font-semibold">الوحدة الافتراضية للنص الملصق أو المولد</span>
           <input className="w-full rounded-lg border border-slate-300 bg-white p-3" onChange={(event) => setBulkUnit(event.target.value)} value={bulkUnit} />
         </label>
         <textarea className="mt-4 w-full rounded-lg border border-slate-300 p-3" onChange={(event) => setPasteText(event.target.value)} placeholder="Q: ... | Options: ... | Answer: ... | Diff: ..." rows="6" value={pasteText} />
